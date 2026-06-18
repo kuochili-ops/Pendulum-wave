@@ -152,6 +152,38 @@
             color: white;
             border: none;
         }
+        /* 音訊開啟提示遮罩 */
+        #audio-welcome-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(5,5,5,0.85);
+            z-index: 200;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            backdrop-filter: blur(8px);
+            transition: opacity 0.5s ease;
+        }
+        #audio-welcome-overlay button {
+            width: auto;
+            padding: 15px 40px;
+            font-size: 18px;
+            background: #00ffcc;
+            color: #111;
+            font-weight: bold;
+            border: none;
+            border-radius: 30px;
+            box-shadow: 0 0 20px rgba(0,255,204,0.4);
+        }
+        #audio-welcome-overlay p {
+            margin-top: 15px;
+            color: #888;
+            font-size: 14px;
+        }
         #hint {
             position: absolute;
             bottom: 20px;
@@ -168,6 +200,11 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 </head>
 <body>
+
+    <div id="audio-welcome-overlay">
+        <button id="btn-start-app">开启 𓃥 白六擺盪球 (含音效)</button>
+        <p>☉ 建議配戴耳機以獲得最佳空間立體聲體驗 ☉</p>
+    </div>
 
     <div id="canvas-container"></div>
 
@@ -225,6 +262,53 @@
     <div id="hint">☉ 畫面可使用單指/滑鼠滑動旋轉視角 ｜ 雙指/滾輪縮放 ☉</div>
 
     <script>
+        // --- Web Audio API 音訊系統建置 ---
+        let audioCtx = null;
+
+        // 精選空靈音樂盒感五聲音階頻率表 (繩子越短，i 越大，音階越高)
+        // 採用多個八度的五聲音階 (C Major Pentatonic: C, D, E, G, A)
+        const pentatonicScale = [
+            130.81, 146.83, 164.81, 196.00, 220.00, // 低音區 (對應長繩球)
+            261.63, 293.66, 329.63, 392.00, 440.00, // 中音區
+            523.25, 587.33, 659.25, 783.99, 880.00, // 高音區
+            1046.50                                 // 極高音 (對應最短繩球)
+        ];
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+        }
+
+        // 觸發音符發聲
+        function playTone(frequency, panValue) {
+            if (!audioCtx) return;
+            
+            // 建立音訊節點
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            const panner = audioCtx.createStereoPanner ? audioCtx.createStereoPanner() : null;
+
+            // 聲音波形選用正弦波 (Sine) 搭配微微三角波 (Triangle)，營造水晶般的音樂盒清脆感
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(frequency, audioCtx.currentTime);
+
+            // 音量包絡線控制 (Envelope: 快速擊弦，緩慢釋放)
+            gainNode.gain.setValueAtTime(0.18, audioCtx.currentTime); // 初始音量
+            gainNode.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.6); // 0.6秒內衰減至靜音
+
+            // 空間立體聲：根據球在 3D 場景中的 Z 軸位置，即時分配左右耳聲道
+            if (panner) {
+                panner.pan.setValueAtTime(panValue, audioCtx.currentTime);
+                oscillator.connect(gainNode).connect(panner).connect(audioCtx.destination);
+            } else {
+                oscillator.connect(gainNode).connect(audioCtx.destination);
+            }
+
+            oscillator.start();
+            oscillator.stop(audioCtx.currentTime + 0.6);
+        }
+
         // --- 基本場景設定 ---
         const container = document.getElementById('canvas-container');
         const scene = new THREE.Scene();
@@ -286,51 +370,34 @@
         let accumulatedTime = 0; 
         let lastFrameTime = Date.now();
 
-        function getBallMaterial(index, total, theme) {
-            const matConfig = {
-                metalness: 0.2,
-                roughness: 0.1,
-                color: new THREE.Color()
-            };
+        function getRainbowColor(index, total) {
+            const hue = (index / total) * 360;
+            return new THREE.Color(`hsl(${hue}, 95%, 55%)`);
+        }
 
+        function getBallMaterial(index, total, theme) {
+            const matConfig = { metalness: 0.2, roughness: 0.1, color: new THREE.Color() };
             const ratio = index / total;
 
             switch(theme) {
                 case 'gold':
-                    matConfig.color.setHex(0xd4af37); 
-                    matConfig.metalness = 0.9;
-                    matConfig.roughness = 0.15;
-                    break;
+                    matConfig.color.setHex(0xd4af37); matConfig.metalness = 0.9; matConfig.roughness = 0.15; break;
                 case 'silver':
-                    matConfig.color.setHex(0xe0e0e0); 
-                    matConfig.metalness = 0.9;
-                    matConfig.roughness = 0.1;
-                    break;
+                    matConfig.color.setHex(0xe0e0e0); matConfig.metalness = 0.9; matConfig.roughness = 0.1; break;
                 case 'emerald':
-                    matConfig.color.setHSL(0.35 + ratio * 0.1, 0.9, 0.3 + ratio * 0.3);
-                    matConfig.roughness = 0.05;
-                    break;
+                    matConfig.color.setHSL(0.35 + ratio * 0.1, 0.9, 0.3 + ratio * 0.3); matConfig.roughness = 0.05; break;
                 case 'aurora':
-                    matConfig.color.setHSL(0.55 + ratio * 0.2, 0.9, 0.5);
-                    matConfig.metalness = 0.4;
-                    break;
+                    matConfig.color.setHSL(0.55 + ratio * 0.2, 0.9, 0.5); matConfig.metalness = 0.4; break;
                 case 'cyber':
-                    if (index % 2 === 0) {
-                        matConfig.color.setHex(0xff0055);
-                    } else {
-                        matConfig.color.setHex(0x00ffcc);
-                    }
-                    matConfig.roughness = 0.1;
-                    break;
+                    matConfig.color.setHex(index % 2 === 0 ? 0xff0055 : 0x00ffcc); matConfig.roughness = 0.1; break;
                 case 'rainbow':
                 default:
-                    matConfig.color.setHSL(ratio * 1.0, 0.95, 0.55);
-                    break;
+                    matConfig.color.setHSL(ratio * 1.0, 0.95, 0.55); break;
             }
-
             return new THREE.MeshStandardMaterial(matConfig);
         }
 
+        // --- 建立單擺物件 ---
         function createPendulums() {
             bobs.forEach(bob => {
                 scene.remove(bob.pivot);
@@ -394,11 +461,16 @@
                     phaseShift = Math.random() * Math.PI * 2;
                 }
 
+                // 分配音頻頻率：i 越大（繩越短），對應的音階頻率越高
+                const frequency = pentatonicScale[i] || 440;
+
                 bobs.push({
                     pivot: pivot,
                     omega: (2 * Math.PI) / T, 
                     amplitude: amplitude,
-                    phaseShift: phaseShift
+                    phaseShift: phaseShift,
+                    frequency: frequency,
+                    lastSign: 0 // 紀錄上一次擺盪方向的數學正負號，用來精確抓取速度為0的最高頂點
                 });
             }
             
@@ -406,6 +478,7 @@
             lastFrameTime = Date.now();
         }
 
+        // --- 動態更新與發聲偵測模擬 ---
         function animate() {
             requestAnimationFrame(animate);
 
@@ -419,8 +492,25 @@
             }
 
             bobs.forEach(bob => {
-                const theta = bob.amplitude * Math.cos(bob.omega * accumulatedTime + bob.phaseShift);
+                // 單擺物理運動公式：theta = A * cos(omega * t + phi)
+                const angleState = bob.omega * accumulatedTime + bob.phaseShift;
+                const theta = bob.amplitude * Math.cos(angleState);
                 bob.pivot.rotation.z = theta; 
+
+                // 【聲音偵測核心】：速度波形為負正弦波（-sin）。當 sin 穿過 0 的瞬間，代表 cos 到達最高處（1 或 -1）。
+                // 我們直接利用正弦波的正負號反轉（Sign Change），精確捕捉球盪到「最左側最高點」或「最右側最高點」的瞬間。
+                if (isPlaying && audioCtx) {
+                    const currentSign = Math.sign(Math.sin(angleState));
+                    
+                    if (bob.lastSign !== 0 && currentSign !== bob.lastSign) {
+                        // 計算該球相對於目前 3D 相機左右耳的空間比重（Pan Value: -1.0 左耳 到 1.0 右耳）
+                        const panVal = Math.max(-1, Math.min(1, bob.pivot.position.z / (totalBalls * spacing / 2)));
+                        
+                        // 觸發音符發聲
+                        playTone(bob.frequency, panVal);
+                    }
+                    bob.lastSign = currentSign;
+                }
             });
 
             controls.update();
@@ -431,23 +521,16 @@
         const panel = document.getElementById('ui-panel');
         const togglePanelBtn = document.getElementById('btn-toggle-panel');
         
-        // 統一更新按鈕文字與狀態的函式
         function updatePanelUI() {
-            if (panel.classList.contains('collapsed')) {
-                togglePanelBtn.innerText = "◣"; 
-            } else {
-                togglePanelBtn.innerText = "◢"; 
-            }
+            togglePanelBtn.innerText = panel.classList.contains('collapsed') ? "◣" : "◢";
         }
 
-        // 點擊收合鈕切換狀態
         togglePanelBtn.addEventListener('click', (e) => {
-            e.stopPropagation(); // 防止事件冒泡到 container
+            e.stopPropagation();
             panel.classList.toggle('collapsed');
             updatePanelUI();
         });
 
-        // 【新增功能】：觸碰或點擊 3D 顯示區時，如果面板開著，就自動收合
         container.addEventListener('pointerdown', () => {
             if (!panel.classList.contains('collapsed')) {
                 panel.classList.add('collapsed');
@@ -455,16 +538,21 @@
             }
         });
 
+        // 開啟遮罩按鈕點擊
+        document.getElementById('btn-start-app').addEventListener('click', () => {
+            initAudio(); // 初始化音訊
+            document.getElementById('audio-welcome-overlay').style.opacity = 0;
+            setTimeout(() => {
+                document.getElementById('audio-welcome-overlay').style.display = 'none';
+            }, 500);
+        });
+
         document.getElementById('slide-amp').addEventListener('input', (e) => {
             document.getElementById('val-amp').innerText = e.target.value + "°";
             const maxAmplitude = (parseFloat(e.target.value) * Math.PI) / 180;
             const mode = document.getElementById('wave-mode').value;
             bobs.forEach((bob, i) => {
-                if (mode === 'zigzag') {
-                    bob.amplitude = (i % 2 === 0) ? maxAmplitude : -maxAmplitude;
-                } else {
-                    bob.amplitude = maxAmplitude;
-                }
+                bob.amplitude = (mode === 'zigzag' && i % 2 !== 0) ? -maxAmplitude : maxAmplitude;
             });
         });
 
