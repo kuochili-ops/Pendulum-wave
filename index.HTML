@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>𓃥 白六擺盪球</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #050505;
+            font-family: 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+            color: #fff;
+            user-select: none;
+        }
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+        }
+        /* UI 控制面板 */
+        #ui-panel {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(20, 20, 20, 0.9);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.6);
+            border: 1px solid rgba(255,255,255,0.1);
+            width: 280px;
+            pointer-events: auto;
+            z-index: 100;
+            box-sizing: border-box;
+            transition: all 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+            transform-origin: top left;
+        }
+        /* 預設收合狀態 */
+        #ui-panel.collapsed {
+            width: 45px;
+            height: 45px;
+            padding: 0;
+            overflow: hidden;
+            background: rgba(20, 20, 20, 0.7);
+            border-color: rgba(255,255,255,0.05);
+        }
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            transition: margin 0.3s;
+        }
+        #ui-panel.collapsed .panel-header {
+            margin: 0;
+            width: 100%;
+            height: 100%;
+            justify-content: center;
+        }
+        h3 {
+            margin: 0;
+            font-size: 18px;
+            letter-spacing: 1px;
+            color: #00ffcc;
+            text-shadow: 0 0 8px rgba(0,255,204,0.4);
+        }
+        #ui-panel.collapsed h3 {
+            display: none;
+        }
+        #btn-toggle-panel {
+            background: none;
+            border: none;
+            color: #00ffcc;
+            font-size: 16px;
+            cursor: pointer;
+            width: auto;
+            padding: 5px 8px;
+            border-radius: 4px;
+            transition: background 0.2s;
+        }
+        #btn-toggle-panel:hover {
+            background: rgba(255,255,255,0.1);
+        }
+        #ui-panel.collapsed #btn-toggle-panel {
+            width: 100%;
+            height: 100%;
+            font-size: 18px;
+            border-radius: 11px;
+        }
+        .panel-content {
+            transition: opacity 0.2s;
+            opacity: 1;
+        }
+        #ui-panel.collapsed .panel-content {
+            display: none;
+            opacity: 0;
+        }
+        .control-group {
+            margin-bottom: 14px;
+        }
+        label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+            margin-bottom: 6px;
+            color: #aaa;
+        }
+        label span {
+            color: #00ffcc;
+        }
+        select, button {
+            width: 100%;
+            padding: 10px;
+            background: #2a2a2a;
+            border: 1px solid #444;
+            color: #fff;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            outline: none;
+        }
+        select:hover, button:hover {
+            background: #3a3a3a;
+            border-color: #00ffcc;
+        }
+        input[type="range"] {
+            width: 100%;
+            margin: 4px 0;
+            accent-color: #00ffcc;
+        }
+        .btn-flex {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        button.btn-primary {
+            background: #00ffcc;
+            color: #111;
+            font-weight: bold;
+            border: none;
+        }
+        button.btn-primary:hover {
+            background: #00ccaa;
+            box-shadow: 0 0 10px rgba(0,255,204,0.5);
+        }
+        button.btn-toggle {
+            background: #333;
+            border: 1px solid #555;
+        }
+        button.btn-toggle.active {
+            background: #ff3366;
+            color: white;
+            border: none;
+        }
+        #hint {
+            position: absolute;
+            bottom: 20px;
+            width: 100%;
+            text-align: center;
+            font-size: 13px;
+            color: #666;
+            pointer-events: none;
+            letter-spacing: 1px;
+            z-index: 90;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+
+    <div id="canvas-container"></div>
+
+    <div id="ui-panel" class="collapsed">
+        <div class="panel-header">
+            <h3>𓃥 白六擺盪球</h3>
+            <button id="btn-toggle-panel" title="收合/展開選單">◣</button>
+        </div>
+        
+        <div class="panel-content">
+            <div class="control-group">
+                <label>選擇擺盪模式</label>
+                <select id="wave-mode">
+                    <option value="standard">標準單擺波 (同向同側釋放)</option>
+                    <option value="zigzag">交錯鋸齒 (正反兩側釋放)</option>
+                    <option value="center">中央擴散 (從中心向兩側漸變)</option>
+                    <option value="random">混沌樂章 (隨機初始相位)</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label>球體色彩主題</label>
+                <select id="color-theme">
+                    <option value="rainbow">經典彩虹漸層</option>
+                    <option value="gold">純奢華金 (Metallic Gold)</option>
+                    <option value="silver">純太空銀 (Metallic Silver)</option>
+                    <option value="emerald">翡翠綠漸層 (Emerald Gradient)</option>
+                    <option value="aurora">極光藍紫漸層 (Aurora Borealis)</option>
+                    <option value="cyber">賽博霓虹漸層 (Cyberpunk Neon)</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label>擺盪角度 (幅度) <span id="val-amp">30°</span></label>
+                <input type="range" id="slide-amp" min="10" max="60" value="30">
+            </div>
+
+            <div class="control-group">
+                <label>擺索增長比例 <span id="val-growth">1.0x</span></label>
+                <input type="range" id="slide-growth" min="0.3" max="2.0" step="0.1" value="1.0">
+            </div>
+
+            <div class="control-group">
+                <label>擺盪速度快慢 <span id="val-speed">1.0x</span></label>
+                <input type="range" id="slide-speed" min="1.0" max="5.0" step="0.2" value="1.0">
+            </div>
+
+            <div class="btn-flex">
+                <button class="btn-toggle" id="btn-playpause">停止</button>
+                <button class="btn-primary" id="btn-reset">重新釋放</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="hint">☉ 畫面可使用單指/滑鼠滑動旋轉視角 ｜ 雙指/滾輪縮放 ☉</div>
+
+    <script>
+        // --- 基本場景設定 ---
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(0x050505, 0.0008);
+
+        // 黃金對齊視角位置
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 4000);
+        camera.position.set(135, 30, 140); 
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        container.appendChild(renderer.domElement);
+
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.target.set(0, 45, 0); 
+        controls.maxPolarAngle = Math.PI / 2 + 0.1;
+
+        // --- 光影設定 ---
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.75); 
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
+        dirLight.position.set(150, 250, 100);
+        dirLight.castShadow = true;
+        scene.add(dirLight);
+
+        const sideLight = new THREE.DirectionalLight(0x00ffcc, 0.3);
+        sideLight.position.set(-150, 100, -50);
+        scene.add(sideLight);
+
+        // --- 固定物理參數與固定頂桿 ---
+        const g = 9.81;                 
+        const totalBalls = 16;          
+        const spacing = 4.5;            
+        const zOffset = -((totalBalls - 1) * spacing) / 2; 
+
+        const barGeo = new THREE.BoxGeometry(2.0, 2.0, totalBalls * spacing + 10);
+        const barMat = new THREE.MeshStandardMaterial({ color: 0x181818, roughness: 0.6 });
+        const topBar = new THREE.Mesh(barGeo, barMat);
+        topBar.position.set(0, 170, 0); 
+        scene.add(topBar);
+
+        const floorGeo = new THREE.PlaneGeometry(1000, 1000);
+        const floorMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.8 });
+        const floor = new THREE.Mesh(floorGeo, floorMat);
+        floor.rotation.x = -Math.PI / 2;
+        floor.position.y = -20;
+        floor.receiveShadow = true;
+        scene.add(floor);
+
+        // --- 狀態變數 ---
+        let bobs = [];
+        let isPlaying = true;
+        let accumulatedTime = 0; 
+        let lastFrameTime = Date.now();
+
+        function getBallMaterial(index, total, theme) {
+            const matConfig = {
+                metalness: 0.2,
+                roughness: 0.1,
+                color: new THREE.Color()
+            };
+
+            const ratio = index / total;
+
+            switch(theme) {
+                case 'gold':
+                    matConfig.color.setHex(0xd4af37); 
+                    matConfig.metalness = 0.9;
+                    matConfig.roughness = 0.15;
+                    break;
+                case 'silver':
+                    matConfig.color.setHex(0xe0e0e0); 
+                    matConfig.metalness = 0.9;
+                    matConfig.roughness = 0.1;
+                    break;
+                case 'emerald':
+                    matConfig.color.setHSL(0.35 + ratio * 0.1, 0.9, 0.3 + ratio * 0.3);
+                    matConfig.roughness = 0.05;
+                    break;
+                case 'aurora':
+                    matConfig.color.setHSL(0.55 + ratio * 0.2, 0.9, 0.5);
+                    matConfig.metalness = 0.4;
+                    break;
+                case 'cyber':
+                    if (index % 2 === 0) {
+                        matConfig.color.setHex(0xff0055);
+                    } else {
+                        matConfig.color.setHex(0x00ffcc);
+                    }
+                    matConfig.roughness = 0.1;
+                    break;
+                case 'rainbow':
+                default:
+                    matConfig.color.setHSL(ratio * 1.0, 0.95, 0.55);
+                    break;
+            }
+
+            return new THREE.MeshStandardMaterial(matConfig);
+        }
+
+        function createPendulums() {
+            bobs.forEach(bob => {
+                scene.remove(bob.pivot);
+                bob.pivot.children.forEach(child => {
+                    if (child.geometry) child.geometry.dispose();
+                    if (child.material) child.material.dispose();
+                });
+            });
+            bobs = [];
+
+            const mode = document.getElementById('wave-mode').value;
+            const theme = document.getElementById('color-theme').value;
+            const growthScale = parseFloat(document.getElementById('slide-growth').value); 
+            const ampDegrees = parseFloat(document.getElementById('slide-amp').value);
+            const maxAmplitude = (ampDegrees * Math.PI) / 180; 
+
+            const T_loop = 60; 
+            const baseCount = 6.6; 
+            const stepCount = 0.3; 
+
+            const ropeMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.3, metalness: 0.2 });
+            const jointMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+
+            for (let i = 0; i < totalBalls; i++) {
+                const count = baseCount + (i * stepCount); 
+                const T = T_loop / count;    
+                const L = g * Math.pow(T / (2 * Math.PI), 2) * growthScale; 
+
+                const pivot = new THREE.Group();
+                pivot.position.set(0, topBar.position.y, zOffset + i * spacing);
+
+                const jointGeo = new THREE.SphereGeometry(0.3, 16, 16);
+                const joint = new THREE.Mesh(jointGeo, jointMat);
+                pivot.add(joint);
+
+                const ropeRadius = 0.12;
+                const ropeGeo = new THREE.CylinderGeometry(ropeRadius, ropeRadius, L, 8);
+                const rope = new THREE.Mesh(ropeGeo, ropeMat);
+                rope.position.set(0, -L / 2, 0); 
+                pivot.add(rope);
+
+                const ballRadius = 1.6;
+                const ballGeo = new THREE.SphereGeometry(ballRadius, 32, 32);
+                const ballMat = getBallMaterial(i, totalBalls, theme);
+                
+                const ball = new THREE.Mesh(ballGeo, ballMat);
+                ball.position.set(0, -L, 0); 
+                ball.castShadow = true;
+                pivot.add(ball);
+
+                scene.add(pivot);
+
+                let amplitude = maxAmplitude;
+                let phaseShift = 0;
+
+                if (mode === 'zigzag') {
+                    amplitude = (i % 2 === 0) ? maxAmplitude : -maxAmplitude;
+                } else if (mode === 'center') {
+                    phaseShift = Math.abs(i - totalBalls/2) * 0.35;
+                } else if (mode === 'random') {
+                    phaseShift = Math.random() * Math.PI * 2;
+                }
+
+                bobs.push({
+                    pivot: pivot,
+                    omega: (2 * Math.PI) / T, 
+                    amplitude: amplitude,
+                    phaseShift: phaseShift
+                });
+            }
+            
+            accumulatedTime = 0;
+            lastFrameTime = Date.now();
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const now = Date.now();
+            const speedMultiplier = parseFloat(document.getElementById('slide-speed').value);
+            const deltaTime = ((now - lastFrameTime) / 1000) * speedMultiplier;
+            lastFrameTime = now;
+
+            if (isPlaying) {
+                accumulatedTime += deltaTime;
+            }
+
+            bobs.forEach(bob => {
+                const theta = bob.amplitude * Math.cos(bob.omega * accumulatedTime + bob.phaseShift);
+                bob.pivot.rotation.z = theta; 
+            });
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        // --- UI 控制與事件監聽 ---
+        const panel = document.getElementById('ui-panel');
+        const togglePanelBtn = document.getElementById('btn-toggle-panel');
+        
+        // 統一更新按鈕文字與狀態的函式
+        function updatePanelUI() {
+            if (panel.classList.contains('collapsed')) {
+                togglePanelBtn.innerText = "◣"; 
+            } else {
+                togglePanelBtn.innerText = "◢"; 
+            }
+        }
+
+        // 點擊收合鈕切換狀態
+        togglePanelBtn.addEventListener('click', (e) => {
+            e.stopPropagation(); // 防止事件冒泡到 container
+            panel.classList.toggle('collapsed');
+            updatePanelUI();
+        });
+
+        // 【新增功能】：觸碰或點擊 3D 顯示區時，如果面板開著，就自動收合
+        container.addEventListener('pointerdown', () => {
+            if (!panel.classList.contains('collapsed')) {
+                panel.classList.add('collapsed');
+                updatePanelUI();
+            }
+        });
+
+        document.getElementById('slide-amp').addEventListener('input', (e) => {
+            document.getElementById('val-amp').innerText = e.target.value + "°";
+            const maxAmplitude = (parseFloat(e.target.value) * Math.PI) / 180;
+            const mode = document.getElementById('wave-mode').value;
+            bobs.forEach((bob, i) => {
+                if (mode === 'zigzag') {
+                    bob.amplitude = (i % 2 === 0) ? maxAmplitude : -maxAmplitude;
+                } else {
+                    bob.amplitude = maxAmplitude;
+                }
+            });
+        });
+
+        document.getElementById('slide-growth').addEventListener('input', (e) => {
+            document.getElementById('val-growth').innerText = e.target.value + "x";
+            createPendulums(); 
+        });
+
+        document.getElementById('slide-speed').addEventListener('input', (e) => {
+            document.getElementById('val-speed').innerText = e.target.value + "x";
+        });
+
+        document.getElementById('color-theme').addEventListener('change', createPendulums);
+        document.getElementById('wave-mode').addEventListener('change', createPendulums);
+        document.getElementById('btn-reset').addEventListener('click', createPendulums);
+
+        const playPauseBtn = document.getElementById('btn-playpause');
+        playPauseBtn.addEventListener('click', () => {
+            isPlaying = !isPlaying;
+            if (isPlaying) {
+                playPauseBtn.innerText = "停止";
+                playPauseBtn.classList.remove('active');
+                lastFrameTime = Date.now(); 
+            } else {
+                playPauseBtn.innerText = "開始擺盪";
+                playPauseBtn.classList.add('active');
+            }
+        });
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        createPendulums();
+        animate();
+    </script>
+</body>
+</html>
