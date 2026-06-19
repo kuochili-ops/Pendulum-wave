@@ -265,7 +265,6 @@
         // --- Web Audio API 音訊系統建置 ---
         let audioCtx = null;
 
-        // 精選空靈音樂盒感五聲音階頻率表 (繩子越短，i 越大，音階越高)
         const pentatonicScale = [
             130.81, 146.83, 164.81, 196.00, 220.00, 
             261.63, 293.66, 329.63, 392.00, 440.00, 
@@ -307,9 +306,9 @@
         const scene = new THREE.Scene();
         scene.fog = new THREE.FogExp2(0x050505, 0.001);
 
-        // 【視角優化】：配合調低後的空間高度，重設黃金俯視斜視角的相機高度，維持與 11:28 截圖一模一樣的構圖比例
+        // 【初始視角完美重現】：將相機高度調整成最漂亮的黃金俯視視角，完全對齊 12:10 截圖的構圖位置
         const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 4000);
-        camera.position.set(100, 65, 125); 
+        camera.position.set(90, 40, 100); 
 
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
@@ -321,7 +320,8 @@
         const controls = new THREE.OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
         controls.dampingFactor = 0.05;
-        controls.target.set(0, 15, 0); // 將焦點同步下移，聚焦在靠近地面的球體擺盪重心
+        // 核心對焦錨定在空間原點 (0,0,0)，讓長短球體完美填滿整個螢幕中央上半段
+        controls.target.set(0, 0, 0); 
         controls.maxPolarAngle = Math.PI / 2 + 0.1;
 
         // --- 光影設定 ---
@@ -343,19 +343,19 @@
         const spacing = 4.5;            
         const zOffset = -((totalBalls - 1) * spacing) / 2; 
 
-        // 【核心修正】：將頂部橫桿從高度 170 大幅調低至 115，使其完美向下靠攏
+        // 【空間重構修正】：將頂部固定黑桿從 115 降至 55 處，根除球組過高縮在頂部的問題
         const barGeo = new THREE.BoxGeometry(2.0, 2.0, totalBalls * spacing + 10);
         const barMat = new THREE.MeshStandardMaterial({ color: 0x181818, roughness: 0.6 });
         const topBar = new THREE.Mesh(barGeo, barMat);
-        topBar.position.set(0, 115, 0); 
+        topBar.position.set(0, 55, 0); 
         scene.add(topBar);
 
-        // 底座固定地板 (位置固定在高度 -20 處，承接球體陰影)
+        // 底座地板 (下沉至高度 -65 處，留出完美的物理懸吊視覺下垂空間)
         const floorGeo = new THREE.PlaneGeometry(1000, 1000);
         const floorMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.8 });
         const floor = new THREE.Mesh(floorGeo, floorMat);
         floor.rotation.x = -Math.PI / 2;
-        floor.position.y = -20;
+        floor.position.y = -65;
         floor.receiveShadow = true;
         scene.add(floor);
 
