@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>𓃥 白六擺盪球</title>
+    <title>𓃥 白六擺盪球 - 高質感金屬光澤修正版</title>
     <style>
         body {
             margin: 0;
@@ -306,7 +306,6 @@
         const scene = new THREE.Scene();
         scene.fog = new THREE.FogExp2(0x050505, 0.001);
 
-        // 【初始視角完美重現】：將相機高度調整成最漂亮的黃金俯視視角，完全對齊 12:10 截圖的構圖位置
         const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 4000);
         camera.position.set(90, 40, 100); 
 
@@ -320,22 +319,35 @@
         const controls = new THREE.OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
         controls.dampingFactor = 0.05;
-        // 核心對焦錨定在空間原點 (0,0,0)，讓長短球體完美填滿整個螢幕中央上半段
         controls.target.set(0, 0, 0); 
         controls.maxPolarAngle = Math.PI / 2 + 0.1;
 
-        // --- 光影設定 ---
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.75); 
+        // --- 【核心重構：多維度補光系統】 ---
+        // 1. 基底環境光（微弱維持基本暗部細節）
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.25); 
         scene.add(ambientLight);
 
-        const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
-        dirLight.position.set(150, 200, 100);
+        // 2. 主頂部主光（帶陰影）
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(80, 200, 60);
         dirLight.castShadow = true;
         scene.add(dirLight);
 
-        const sideLight = new THREE.DirectionalLight(0x00ffcc, 0.3);
+        // 3. 右前側金屬高光補光（關鍵：負責在金、銀球表面打出高光白邊）
+        const frontHighlightLight = new THREE.DirectionalLight(0xffffff, 1.2);
+        frontHighlightLight.position.set(120, 60, 150);
+        scene.add(frontHighlightLight);
+
+        // 4. 左後側環境氛圍光（保留原本的賽博藍綠霓虹感）
+        const sideLight = new THREE.DirectionalLight(0x00ffcc, 0.35);
         sideLight.position.set(-150, 80, -50);
         scene.add(sideLight);
+
+        // 5. 正前方極低處向上的逆光（確保球體在正下方翻轉時底部不會死黑）
+        const bottomLight = new THREE.PointLight(0xffffff, 0.6, 300);
+        bottomLight.position.set(0, -50, 100);
+        scene.add(bottomLight);
+
 
         // --- 固定物理參數與固定頂桿 ---
         const g = 9.81;                 
@@ -343,14 +355,12 @@
         const spacing = 4.5;            
         const zOffset = -((totalBalls - 1) * spacing) / 2; 
 
-        // 【空間重構修正】：將頂部固定黑桿從 115 降至 55 處，根除球組過高縮在頂部的問題
         const barGeo = new THREE.BoxGeometry(2.0, 2.0, totalBalls * spacing + 10);
         const barMat = new THREE.MeshStandardMaterial({ color: 0x181818, roughness: 0.6 });
         const topBar = new THREE.Mesh(barGeo, barMat);
         topBar.position.set(0, 55, 0); 
         scene.add(topBar);
 
-        // 底座地板 (下沉至高度 -65 處，留出完美的物理懸吊視覺下垂空間)
         const floorGeo = new THREE.PlaneGeometry(1000, 1000);
         const floorMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.8 });
         const floor = new THREE.Mesh(floorGeo, floorMat);
@@ -370,15 +380,24 @@
             return new THREE.Color(`hsl(${hue}, 95%, 55%)`);
         }
 
+        // --- 【優化修正：金銀金屬材質拉絲霧面調校】 ---
         function getBallMaterial(index, total, theme) {
-            const matConfig = { metalness: 0.2, roughness: 0.1, color: new THREE.Color() };
+            const matConfig = { metalness: 0.1, roughness: 0.15, color: new THREE.Color() };
             const ratio = index / total;
 
             switch(theme) {
                 case 'gold':
-                    matConfig.color.setHex(0xd4af37); matConfig.metalness = 0.9; matConfig.roughness = 0.15; break;
+                    // 霧面奢華金：降低原本過高導致吸黑的金屬度，並稍微調高粗糙度捕捉環境高光
+                    matConfig.color.setHex(0xfad771); 
+                    matConfig.metalness = 0.82; 
+                    matConfig.roughness = 0.22; 
+                    break;
                 case 'silver':
-                    matConfig.color.setHex(0xe0e0e0); matConfig.metalness = 0.9; matConfig.roughness = 0.1; break;
+                    // 太空極光銀：高反光白銀色
+                    matConfig.color.setHex(0xf0f0f0); 
+                    matConfig.metalness = 0.85; 
+                    matConfig.roughness = 0.18; 
+                    break;
                 case 'emerald':
                     matConfig.color.setHSL(0.35 + ratio * 0.1, 0.9, 0.3 + ratio * 0.3); matConfig.roughness = 0.05; break;
                 case 'aurora':
